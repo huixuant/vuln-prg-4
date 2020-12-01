@@ -8,11 +8,6 @@
 
 #define MIN_REQ_SIZE 8
 
-typedef struct req {
-    unsigned char* contents;
-    unsigned char crc[8];
-} req_t;
-
 void this_is_a_vulnerable_function(size_t size) {
     char buf[10] = { 0 };
     buf[size] = "A";
@@ -31,6 +26,9 @@ int fuzz_target(char* filename) {
     //int fd;
     //__int64 file_size;
     int bytes_read;
+    unsigned char* req_contents;
+    unsigned char req_crc[8];
+
     /*
     _sopen_s(&fd, filename, _O_RDONLY, _SH_DENYRW, _S_IREAD);
     if (fd == -1) {
@@ -64,19 +62,16 @@ int fuzz_target(char* filename) {
         return 0;
     }
 
-    // init req struct 
-    req_t input = { 0 };
-
     // dynamically allocate memory for file data
-    input.contents = malloc(sizeof(unsigned char) * (bytes_count - 7));
-    if (input.contents == NULL) {
+    req_contents = malloc(sizeof(unsigned char) * (bytes_count - 7));
+    if (req_contents == NULL) {
         printf("Memory error occured.");
         return 0;
     }
 
-    memset(input.contents, 0, sizeof(unsigned char) * (bytes_count - 7));
-    fread(input.contents, sizeof(unsigned char), bytes_count - 8, fp);
-    fread(&input.crc, sizeof(input.crc), 1, fp);
+    memset(req_contents, 0, sizeof(unsigned char) * (bytes_count - 7));
+    fread(req_contents, sizeof(unsigned char), bytes_count - 8, fp);
+    fread(&req_crc, sizeof(req_crc), 1, fp);
     
     // dynamically allocate memory for file data
     /*
@@ -95,13 +90,13 @@ int fuzz_target(char* filename) {
     fclose(fp);
 
     // check crc given is valid
-    uint32_t crc_int = (uint32_t)strtol(input.crc, NULL, 16);
+    uint32_t crc_int = (uint32_t)strtol(req_crc, NULL, 16);
     if (crc_int == 0 || errno == ERANGE) {
         printf("Invalid CRC32 value given.");
         return 0;
     }
 
-    uint32_t computed_crc = rc_crc32(0, input.contents, bytes_count-8);
+    uint32_t computed_crc = rc_crc32(0, req_contents, bytes_count-8);
 
     if (compare_crc(computed_crc, crc_int)) {
         printf("CRC32 check passed.");
@@ -110,7 +105,7 @@ int fuzz_target(char* filename) {
     else
         printf("CRC32 check failed.");
 
-    free(input.contents);
+    free(req_contents);
     return 0;
 }
 
